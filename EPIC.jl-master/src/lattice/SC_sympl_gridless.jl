@@ -1,7 +1,5 @@
 
-#for testing
-#include("/home/alampres/EPIC_new.jl/EPIC.jl-master/src/abstypes.jl")
-
+#for test
 #calculate generalized perveance / current #total charge for PROTON: 1.1023e-8
 function calculate_K(bb::BunchedBeam, σz)
 
@@ -10,120 +8,69 @@ function calculate_K(bb::BunchedBeam, σz)
     return K
 end
 
-
-###### test calculate_K ######
-#=
-num_particles=1000
-beam = BunchedBeam(PROTON, 0.688e11, 275e9, num_particles, [11.3e-9, 1e-9, 3.7e-3])
-K = calculate_K(beam)
-=#
-
-###### for test ######
-#generate beam distribution
-#=
-opIPp = optics4DUC(0.8, 0.0, 0.072, 0.0) 
-mainRF = AccelCavity(591e6, 15.8e6, 7560.0, π)
-αc=1.5e-3
-lmap = LongitudinalRFMap(αc, mainRF)
-initilize_6DGaussiandist!(beam, opIPp, lmap) #vector 6D phase space
-=#
-
-
-###### for test ######
-#=
-Nl = 15
-Nm = 15
-#dx = 3e-5
-#dy = 3e-5
-a = 10e-3 #beam pipe 10mm
-b = 10e-3
-Np = num_particles
-dt = 3800/5/3e8 #ring division - time length
-=#
-
+############# 3 + 1 for cycle #############
 
 function space_charge_gl(bb::BunchedBeam, K, Nl, Nm, a, b, Np, dt)
 
     gamma2lm = zeros(Nl, Nm)
-
-    term1 = zeros(Np)
-    term2 = zeros(Np)
-
-    rinx = @view bb.dist.x[:,1]
-    riny = @view bb.dist.y[:,1]
-
-    factor = 16*pi*K*dt/Np/a/b #Np is number of macroparticles!!!
-    
-    for i in 1:Nl
-        for j in 1:Nm
-            al = i * pi / a
-            bm = j * pi / b
-            for k in 1:Np
-                for l in 1:Np
-                    gamma2lm[i,j] = al^2 + bm^2
-                    term1[l] += (al * sin(al * rinx[k]) * sin(bm * riny[k]) * cos(al * rinx[l]) * sin(bm * riny[l]))/gamma2lm[i,j]
-                    term2[l] += (bm * sin(al * rinx[k]) * sin(bm * riny[k]) * sin(al * rinx[l]) * cos(bm * riny[l]))/gamma2lm[i,j]
-                    bb.dist.px[l] -= (factor) * term1[l]
-                    bb.dist.py[l] -= (factor) * term2[l]
-                end
-            end
-        end
-    end
-
-    
-end
-
-###### for test ######
-#space_charge_gl(beam, Nl, Nm, a, b, Np, dt)
-
-
-#add lost_flags before use DA MODIFICARE, c'e qualcosa che non va!
-#=
-function space_charge_gl_P(bb::BunchedBeam, Nl, Nm, a, b, Np, dt, lost_flags) #with paralellization, same calculate_philm_lf
-    
-    gamma2lm = zeros(Nl, Nm)
-
-    term1 = zeros(Np)
-    term2 = zeros(Np)
-
-    rinx = @view bb.dist.x[:,1]
-    riny = @view bb.dist.y[:,1]
-
+    philm = zeros(Nl, Nm)
+    temp = 0.0
     factor = 16*pi*K*dt/Np/a/b
 
-    nthreads = Threads.nthreads()
-    term1_thread = [zeros(Np) for _ in 1:nthreads]  
-    term2_thread = [zeros(Np) for _ in 1:nthreads]
+    #x = zeros(Np)
+    #y = zeros(Np)
 
-    Threads.@threads for i in 1:Nl
-        tid = Threads.threadid()
+    for i in 1:Nl
+        al = i * pi / a
         for j in 1:Nm
-            al = i * pi / a
             bm = j * pi / b
+
+            @inbounds for k in 1:Np
+                bb.dist.x[k] -= minimum(bb.dist.x)
+                bb.dist.y[k] -= minimum(bb.dist.y)
+                temp += sin(al*bb.dist.x[k])*sin(bm*bb.dist.y[k])
+
+                #x[k] = bb.dist.x[k] - minimum(bb.dist.x)
+                #y[k] = bb.dist.y[k] - minimum(bb.dist.y)
+                #temp += sin(al*x[k])*sin(bm*y[k])
+
+            end
             gamma2lm[i,j] = al^2 + bm^2
-            term1_thread[tid] .+= (al *sin(al * rinx[k]) * sin(bm * riny[k]) * cos(al * rinx[l]) * sin(bm * riny[l]))/gamma2lm[i,j]
-            term2_thread[tid] .+= (bm *sin(al * rinx[k]) * sin(bm * riny[k]) * sin(al * rinx[l]) * cos(bm * riny[l]))/gamma2lm[i,j]
+            philm[i,j] = factor*temp/gamma2lm[i,j]
+
+        end
+        
+    end
+
+    for i in 1:Nl
+        al = i * pi / a
+        for j in 1:Nm
+            bm = j * pi / b
+
+            @inbounds for l in 1:Np
+                bb.dist.x[l] -= minimum(bb.dist.x)
+                bb.dist.y[l] -= minimum(bb.dist.y)
+
+                bb.dist.px[l] -= philm[i,j]* al*cos(al * bb.dist.x[l])*sin(bm * bb.dist.y[l])
+                bb.dist.py[l] -= philm[i,j]* bm*sin(al * bb.dist.x[l])*cos(bm * bb.dist.y[l])
+
+                #bb.dist.px[l] -= philm[i,j]* al*cos(al * x[l])*sin(bm * y[l])
+                #bb.dist.py[l] -= philm[i,j]* bm*sin(al * x[l])*cos(bm * y[l])
+
+            end
+
         end
     end
 
-    # Combine results from all threads
-    for t in 1:nthreads
-        term1 .+= term1_thread[t]
-        term2 .+= term2_thread[t]
-    end
+end
 
-    bb.dist.px .-= factor * term1
-    bb.dist.py .-= factor * term2
-    
 
-    #println(rinpx)
-end=#
- 
+
+############# 3 + 1 for cycle #############
 
 
 mutable struct SPACECHARGE <: AbstractSpaceCharge #problem in abstypes?   # spectral space charge
     # this element is treated as an integrated effect of space charge over a length of effective_len
-    len::Float64
     effective_len::Float64
     Nl::Int64
     Nm::Int64
@@ -131,9 +78,9 @@ mutable struct SPACECHARGE <: AbstractSpaceCharge #problem in abstypes?   # spec
     b::Float64
     eletype::String
 
-    function SPACECHARGE(len::Float64, effective_len::Float64, Nl::Int64, 
+    function SPACECHARGE(effective_len::Float64, Nl::Int64, 
                         Nm::Int64, a::Float64, b::Float64)
-        new(len, effective_len, Nl, Nm, a, b)
+        new(effective_len, Nl, Nm, a, b)
     end
 end
 
@@ -144,15 +91,46 @@ function SC_gl_track!(ele::SPACECHARGE, bb::BunchedBeam, num_particles::Int64)
     σz = bb.beamsize[5]
 
     K = calculate_K(bb, σz)
-    dt = ele.effective_len
-    space_charge_gl(bb, K, ele.Nl, ele.Nm, ele.a, ele.b, num_particles, dt)
-    #space_charge_gl_P(bb, ele.Nl, ele.Nm, ele.a, ele.b, num_particles, dt, lost_flags) #with paralellization
     
-    return nothing
+    space_charge_gl(bb, K, ele.Nl, ele.Nm, ele.a, ele.b, num_particles, ele.effective_len)
+    #space_charge_gl_P(bb, ele.Nl, ele.Nm, ele.a, ele.b, num_particles, dt, lost_flags) #paralellization
+    
+    #return nothing
 end
 
 
+########################### test ###########################
+
+###### test calculate_K ######
+#=
+num_particles=1000
+beam = BunchedBeam(PROTON, 0.688e11, 275e9, num_particles, [11.3e-9, 1e-9, 3.7e-3])
+K = calculate_K(beam,0.006)
+beam.dist.x
+
 ###### for test ######
-#dt=3800/5/3e8
-#sc = SPACECHARGE(dt, dt, Nl, Nm, a, b)
-#SC_gl_track!(sc, beam, Np)
+#generate beam distribution
+opIPp = optics4DUC(0.8, 0.0, 0.072, 0.0) 
+mainRF = AccelCavity(591e6, 15.8e6, 7560.0, π)
+αc=1.5e-3
+lmap = LongitudinalRFMap(αc, mainRF)
+initilize_6DGaussiandist!(beam, opIPp, lmap) #vector 6D phase space
+
+Nl = 15
+Nm = 15
+#dx = 3e-5
+#dy = 3e-5
+a = 10e-3 #beam pipe 10mm
+b = 10e-3
+Np = num_particles
+dt = 0.5 #3800/5/3e8 #ring division - time length
+
+sc = SPACECHARGE(dt, Nl, Nm, a, b)
+
+space_charge_gl(beam, K, Nl, Nm, a, b, Np, dt)
+
+SC_gl_track!(sc, beam, Np)
+
+using Plots
+plot(beam.dist.x, beam.dist.px, seriestype=:scatter, markersize=2)
+=#
