@@ -85,7 +85,6 @@ function SC_gl_track!(ele::SPACECHARGE, bb::BunchedBeam, num_particles::Int64)
     
     space_charge_gl(bb, K, ele.Nl, ele.Nm, ele.a, ele.b, num_particles, ele.effective_len)
     
-    return nothing
 end
 
 
