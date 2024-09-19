@@ -69,7 +69,7 @@ begin
     #define SC_lens for SC_kick BE
     nSC = 1 #4
     ds = 0.5 #3800/(nSC+1)   #0.5     #3833.8451/(nSC+1)
-    #opSC = optics4DUC(0.5, 0.0, 0.5, 0.0) #random number
+    #opSC = optics4DUC(0.5, 0.0, 0.5, 0.0)
     opSC = optics4DUC(10.0, 0.0, 10.0, 0.0)
     phi_advx = LinRange(0, 29.228, nSC+1)
     phi_advy = LinRange(0, 30.210, nSC+1)
@@ -189,11 +189,12 @@ maximum(diff_tunex)
 scatter(tunex_1, tuney_1, marker_z = log10.(diff_tunex .+ 1e-15), markersize = .5,  color = :jet, clim=(-10,-2), 
 aspect_ratio=:equal, legend=:topleft, xlabel="Horizontal Tune", ylabel= "Vertical Tune", label="nSC = 5", dpi=300)
 
-    size=(600,500)#, xlim=(0.228, 0.243), ylim=(0.21, 0.225), xlabel="Horizontal Tune", ylabel="Vertical Tune", label="something", dpi=300)
+    #size=(600,500)#, xlim=(0.228, 0.243), ylim=(0.21, 0.225), xlabel="Horizontal Tune", ylabel="Vertical Tune", label="something", dpi=300)
 
 
 maximum(tunex_1)-minimum(tunex_1)
 maximum(tuney_1)-minimum(tuney_1)
+
 ##### FFT #####
 using LaTeXStrings
 
