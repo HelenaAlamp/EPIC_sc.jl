@@ -8,12 +8,15 @@ function calculate_K(bb::BunchedBeam, σz)
     return K
 end
 
+
 ############# 3 + 1 for cycle #############
+
 
 function space_charge_gl(bb::BunchedBeam, K, Nl, Nm, a, b, Np, dt)
 
     gamma2lm = zeros(Nl, Nm)
     philm = zeros(Nl, Nm)
+    
     temp = 0.0
     factor = 16*pi*K*dt/Np/a/b
 
@@ -24,46 +27,31 @@ function space_charge_gl(bb::BunchedBeam, K, Nl, Nm, a, b, Np, dt)
         al = i * pi / a
         for j in 1:Nm
             bm = j * pi / b
+            gamma2lm[i,j] = al^2 + bm^2
 
             @inbounds for k in 1:Np
-                bb.dist.x[k] -= minimum(bb.dist.x)
-                bb.dist.y[k] -= minimum(bb.dist.y)
+                bb.dist.x[k] += a/2
+                bb.dist.y[k] += b/2
                 temp += sin(al*bb.dist.x[k])*sin(bm*bb.dist.y[k])
 
-                #x[k] = bb.dist.x[k] - minimum(bb.dist.x)
-                #y[k] = bb.dist.y[k] - minimum(bb.dist.y)
-                #temp += sin(al*x[k])*sin(bm*y[k])
-
             end
-            gamma2lm[i,j] = al^2 + bm^2
             philm[i,j] = factor*temp/gamma2lm[i,j]
+            
+            @inbounds for l in 1:Np
+
+                bb.dist.px[l] -= philm[i,j]* al*cos(al * bb.dist.x[l])*sin(bm * bb.dist.y[l])
+                bb.dist.py[l] -= philm[i,j]* bm*sin(al * bb.dist.x[l])*cos(bm * bb.dist.y[l])
+
+                bb.dist.x[l] -= a/2
+                bb.dist.y[l] -= b/2
+            end
 
         end
         
     end
 
-    for i in 1:Nl
-        al = i * pi / a
-        for j in 1:Nm
-            bm = j * pi / b
-
-            @inbounds for l in 1:Np
-                bb.dist.x[l] -= minimum(bb.dist.x)
-                bb.dist.y[l] -= minimum(bb.dist.y)
-
-                bb.dist.px[l] -= philm[i,j]* al*cos(al * bb.dist.x[l])*sin(bm * bb.dist.y[l])
-                bb.dist.py[l] -= philm[i,j]* bm*sin(al * bb.dist.x[l])*cos(bm * bb.dist.y[l])
-
-                #bb.dist.px[l] -= philm[i,j]* al*cos(al * x[l])*sin(bm * y[l])
-                #bb.dist.py[l] -= philm[i,j]* bm*sin(al * x[l])*cos(bm * y[l])
-
-            end
-
-        end
-    end
-
+    
 end
-
 
 
 ############# 3 + 1 for cycle #############
@@ -91,11 +79,13 @@ function SC_gl_track!(ele::SPACECHARGE, bb::BunchedBeam, num_particles::Int64)
     σz = bb.beamsize[5]
 
     K = calculate_K(bb, σz)
+
+    #ele.a = bb.beamsize[1]
+    #ele.b = bb.beamsize[3]
     
     space_charge_gl(bb, K, ele.Nl, ele.Nm, ele.a, ele.b, num_particles, ele.effective_len)
-    #space_charge_gl_P(bb, ele.Nl, ele.Nm, ele.a, ele.b, num_particles, dt, lost_flags) #paralellization
     
-    #return nothing
+    return nothing
 end
 
 
